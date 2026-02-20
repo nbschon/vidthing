@@ -1,0 +1,8 @@
+.DS_Store
+ffmpeg2*
+*.mp4
+*.webm
+*.avi
+*.mov
+*.mkv
+__pycache__/
