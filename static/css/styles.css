@@ -1,3 +1,7 @@
+:root {
+    color-scheme: light dark;
+}
+
 body {
     padding: 1em;
     font-family: sans-serif;
@@ -5,4 +9,20 @@ body {
 
 div {
     margin: 1em;
+    padding: .5em;
+}
+
+fieldset {
+    margin: .4em;
+}
+
+main.container {
+    display: flex;
+    gap: 1em;
+}
+
+.contained {
+    flex: 1;
+    outline: 1px solid light-dark(black, white);
+    margin: 0
 }

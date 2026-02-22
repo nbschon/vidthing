@@ -12,7 +12,7 @@ The following packages must be installed on your system to work:
 I have `yt-dlp` installed separately, but that's probably not necessary.
 
 Do something like this prior to running:
-```console
+```bash
 git clone https://github.com/nbschon/vidthing
 cd vidthing
 python -m venv ./venv/
@@ -23,7 +23,7 @@ python -m pip install -r requirements.txt
 # Usage
 
 Run with a command that looks like the following:
-```console
+```bash
 python -m flask --app main run
 ```
 If you want to have the site be accessible to other devices on your local network,
@@ -35,7 +35,7 @@ host machine's IP at port 5000, depending on how you're running it.
 
 | :warning: Warning |
 |:------------------|
-| This is definitely *not* suitable for running on a public network, so don't do that. |
+| This is definitely *not* suitable for running on a public network, so don't do that. There is no auth, no rate limiting, etc. |
 
 # Rationale
 

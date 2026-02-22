@@ -1,84 +1,98 @@
 {% extends "base.html" %}
 
 {% block content %}
-<form id="form" 
-    hx-encoding="multipart/form-data" 
-    hx-post="/upload", 
-    hx-target="#upload-status", 
-    hx-swap="afterend", 
-    hx-on::after-request="if(event.detail.successful) this.reset()"
-    >
-    <fieldset>
-        <label>
-            <input type="radio" name="source_type" value="file" checked>
-            Upload file
-        </label>
+<main class="container">
+    <form id="form" hx-encoding="multipart/form-data" hx-post="/upload" hx-target="#report"
+        hx-swap="innerHTML" hx-on::after-request="if(event.detail.successful) this.reset()" class="contained">
+        <fieldset>
+            <label>
+                <input type="radio" name="source_type" value="file" checked>
+                Upload file
+            </label>
+            <div>
+                <input type="file" name="file" id="file_field">
+            </div>
+            <!-- <p>You can also drag a file into the window.</p> -->
+            <label>
+                <input type="radio" name="source_type" value="url">
+                Paste URL
+            </label>
+            <div>
+                <input type="text" name="url" id="url_field" placeholder="https://..." />
+            </div>
+        </fieldset>
         <div>
-            <input type="file" name="file" id="file_field">
+            <label for="size">Output size:</label>
+            <input type="number" name="size" id="size" value="10" />
+            <label>
+                <input type="radio" name="suffix" value="kb" />
+                KiB
+            </label>
+            <label>
+                <input type="radio" name="suffix" value="mb" checked />
+                MiB
+            </label>
         </div>
-        <label>
-            <input type="radio" name="source_type" value="url">
-            Paste URL
-        </label>
-        <div>
-            <!-- <label for="url">Video URL:</label> -->
-            <input type="text" name="url" id="url_field" placeholder="https://..."/>
-        </div>
-    </fieldset>
-    <div>
-        <label for="size">Output size:</label>
-        <input type="number" name="size" id="size" value="10"/>
-        <label>
-            <input type="radio" name="suffix" value="kb"/>
-            KiB
-        </label>
-        <label>
-            <input type="radio" name="suffix" value="mb" checked/>
-            MiB
-        </label>
-    </div>
-    <!-- <div> -->
-    <!--     <label for="file_name">File name:</label> -->
-    <!--     <label> -->
-    <!--         <input type="radio" name="file_name" value="same" checked/> -->
-    <!--         Same as input -->
-    <!--     </label> -->
-    <!--     <label> -->
-    <!--         <input type="radio" name="file_name" value="timestamp"/> -->
-    <!--         Upload time -->
-    <!--     </label> -->
-    <!-- </div> -->
+        <fieldset>
+            <div>
+                <label>
+                    <input type="radio" name="passes" value="1" />
+                    One pass (faster, worse quality)
+                </label>
+            </div>
+            <div>
+                <label>
+                    <input type="radio" name="passes" value="2" checked />
+                    Two passes (slower, better quality)
+                </label>
+            </div>
+        </fieldset>
+        <!-- <div> -->
+        <!--     <label for="file_name">File name:</label> -->
+        <!--     <label> -->
+        <!--         <input type="radio" name="file_name" value="same" checked/> -->
+        <!--         Same as input -->
+        <!--     </label> -->
+        <!--     <label> -->
+        <!--         <input type="radio" name="file_name" value="timestamp"/> -->
+        <!--         Upload time -->
+        <!--     </label> -->
+        <!-- </div> -->
     <div>
         <button type="submit">
             Go for it
         </button>
     </div>
-    <progress id="progress" value="0" max="100" ></progress>
-</form>
+    </form>
+    <div class="contained">
+        <div id="report"></div>
+    </div>
+</main>
+<progress id="progress" value="0" max="100"></progress>
 <script>
-htmx.on("#form", "htmx:xhr:progress", function (evt) {
-    htmx.find("#progress").setAttribute("value", evt.detail.loaded / evt.detail.total * 100)
-});
-htmx.on("#form", "htmx:beforeRequest", () => {
-    htmx.find("#progress").setAttribute("value", 0)
-})
-const file_input = document.getElementById("file_field")
-const url_input = document.getElementById("url_field")
-
-document.querySelectorAll('input[name="source_type"]').forEach(rad => {
-    rad.addEventListener("change", () => {
-        const use_file = rad.value === "file" && rad.checked;
-
-        file_input.disabled = !use_file;
-        url_input.disabled = use_file;
-
-        if (use_file) {
-            url_input.value = "";
-        } else {
-            file_input.value = "";
-        }
+    htmx.on("#form", "htmx:xhr:progress", function (evt) {
+        htmx.find("#progress").setAttribute("value", evt.detail.loaded / evt.detail.total * 100)
     });
-});
+    htmx.on("#form", "htmx:beforeRequest", () => {
+        htmx.find("#progress").setAttribute("value", 0)
+    })
+    const file_input = document.getElementById("file_field")
+    const url_input = document.getElementById("url_field")
+
+    document.querySelectorAll('input[name="source_type"]').forEach(rad => {
+        rad.addEventListener("change", () => {
+            const use_file = rad.value === "file" && rad.checked;
+
+            file_input.disabled = !use_file;
+            url_input.disabled = use_file;
+
+            if (use_file) {
+                url_input.value = "";
+            } else {
+                file_input.value = "";
+            }
+        });
+    });
 </script>
 <div id="upload-status"></div>
 {% endblock %}

@@ -1,34 +1,23 @@
 from datetime import datetime
+from dataclasses import dataclass, astuple
 import ffmpeg
 import glob
 import json
 import math
 import os
+from flask import request
 import yt_dlp
+import jobs
 
 format: str = "mp4"
 upload_str = "./uploads/"
 
-def dl_progress_hook(d):
-    match d["status"]:
-        case "downloading":
-            total = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
-            downloaded = d.get("downloaded_bytes", 0)
-            if total > 0:
-                percent = (downloaded / total) * 100
-                print(f"downloaded: {percent:1f}")
-        case "finished":
-            print("done!")
-
-opts = {
-    "outtmpl": "%(title)s.%(ext)s",
-    "merge_output_format": format,
-    "no-mtime": True,
-    "paths": {
-        "home": upload_str
-    },
-    # "progress_hooks": [dl_progress_hook],
-}
+@dataclass
+class RequestInfo:
+    size: int
+    suffix: str
+    passes: int
+    id: str 
 
 def size_in_bytes(size: int, suffix: str) -> int:
     # num_part = ""
@@ -61,16 +50,18 @@ def get_bitrate(duration: float, target_size: int, suffix: str) -> int:
     target_bitrate = size_bits / duration / 1000
     return int(target_bitrate)
 
-def one_pass(path: str, size: int, suffix: str):
-    probe = ffmpeg.probe(path)
-    for stream in probe["streams"]:
-        print("====================")
-        print(stream["codec_type"].upper())
-        print(json.dumps(stream, sort_keys=True, indent=4))
-        print("====================")
+def one_pass(in_path: str, out_path: str, info: RequestInfo):
+    probe = ffmpeg.probe(in_path)
+    # for stream in probe["streams"]:
+    #     print("====================")
+    #     print(stream["codec_type"].upper())
+    #     print(json.dumps(stream, sort_keys=True, indent=4))
+    #     print("====================")
 
     video_stream = next((stream for stream in probe["streams"] if stream["codec_type"] == "video"), None)
     audio_stream = next((stream for stream in probe["streams"] if stream["codec_type"] == "audio"), None)
+
+    size, suffix, passes, id = astuple(info)
 
     if video_stream is not None:
         duration = float(video_stream['duration'])
@@ -83,9 +74,9 @@ def one_pass(path: str, size: int, suffix: str):
 
         (
             ffmpeg
-            .input(path)
+            .input(in_path)
             .output(
-                "output.mp4", 
+                out_path,
                 video_bitrate=f"{int(target_bitrate)}k", 
                 audio_bitrate="96k",
                 vcodec="libx264",
@@ -95,7 +86,7 @@ def one_pass(path: str, size: int, suffix: str):
             .run()
         )
 
-def two_passes(in_path: str, out_path: str, size: int, suffix: str):
+def two_passes(in_path: str, out_path: str, info: RequestInfo):
     probe = ffmpeg.probe(in_path)
     # for stream in probe["streams"]:
     #     # print(stream)
@@ -105,12 +96,18 @@ def two_passes(in_path: str, out_path: str, size: int, suffix: str):
     #     print("====================")
     print(json.dumps(probe["format"], sort_keys=True, indent=4))
 
+    size, suffix, passes, id = astuple(info)
+
     target_size = size_in_bytes(size, suffix)
 
     video_stream = next((stream for stream in probe["streams"] if stream["codec_type"] == "video"), None)
     audio_stream = next((stream for stream in probe["streams"] if stream["codec_type"] == "audio"), None)
     if video_stream is not None:
         duration = float(probe["format"]["duration"])
+        print("====================")
+        print(f"duration: {duration}")
+        print("====================")
+        jobs.update_job(info.id, ("p1", 0.0, duration * 1e6))
         format_size = float(probe["format"]["size"])
         bitrate = format_size * 8 // duration
         print("====================")
@@ -134,7 +131,7 @@ def two_passes(in_path: str, out_path: str, size: int, suffix: str):
 
         sink = "NUL" if os.name == "nt" else "/dev/null"
 
-        time = datetime.now().timestamp()
+        # time = datetime.now().timestamp()
 
         common_args = {
             # "vf": "scale=1024:-2",
@@ -143,7 +140,7 @@ def two_passes(in_path: str, out_path: str, size: int, suffix: str):
             "preset": "slow",
             "passlogfile": "ffmpeg2pass",
             # "progress": f"{time}.txt",
-            "progress": "pipe:1",
+            # "progress": "pipe:",
             "nostats": None,
         }
 
@@ -157,11 +154,15 @@ def two_passes(in_path: str, out_path: str, size: int, suffix: str):
                     "pass": 1,
                     "an": None,
                     "f": "mp4",
+                    "progress": f"./tmp/{id}/p1.log",
                 },
             )
             .overwrite_output()
-            .run(quiet=False)
+            # .run_async(quiet=False, pipe_stdout=True, pipe_stderr=True)
+            .run()
         )
+
+        jobs.update_job(id, ("p2", 0.0, duration * 1e6))
 
         (
             ffmpeg
@@ -173,26 +174,51 @@ def two_passes(in_path: str, out_path: str, size: int, suffix: str):
                     "pass": 2,
                     "c:a": "aac",
                     "b:a": "96k",
+                    "progress": f"./tmp/{id}/p2.log",
                 },
             )
             .overwrite_output()
             .run(quiet=False)
         )
 
+        jobs.update_job(id, ("done", 100, 1))
+
     output_size = os.path.getsize(out_path)
     print(f"size was {output_size:,} bytes (target was {target_size:,})")
     assert output_size <= target_size, f"size was {output_size} ({output_size - target_size} bytes larger than {target_size})"
-    # final_mega = 
+
     print(f"{output_size / 1000 ** 2:.2f} MB, {output_size / 1024 ** 2:.2f} MiB")
-    # os.remove("testvideo.mp4")
+
     for f in glob.glob("ffmpeg2pass*"):
         os.remove(f)
     print("removed pass info files!")
 
-def download(url: str, size: int, suffix: str):
+def download(url: str, info: RequestInfo):
+    def dl_progress_hook(d):
+        match d["status"]:
+            case "downloading":
+                total = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
+                downloaded = d.get("downloaded_bytes", 0)
+                if total > 0:
+                    percent = (downloaded / total) * 100
+                    jobs.update_job(info.id, ("dl", percent, 1.0))
+            case "finished":
+                print("done!")
+
+    opts = {
+        "outtmpl": "%(title)s.%(ext)s",
+        "merge_output_format": format,
+        "no-mtime": True,
+        "paths": {
+            "home": upload_str
+        },
+        "progress_hooks": [dl_progress_hook],
+        # "quiet": True,
+    }
+
     with yt_dlp.YoutubeDL(opts) as dl:
-        info = dl.extract_info(url, download=True)
-        filename = dl.prepare_filename(info)
+        dl_info = dl.extract_info(url, download=True)
+        filename = dl.prepare_filename(dl_info)
         print("====================")
         print(filename)
         print("====================")
@@ -208,7 +234,7 @@ def download(url: str, size: int, suffix: str):
         output_file = f"./processed/{name}-{datetime.now().strftime("%Y%m%d-%H-%M-%S")}.mp4"
 
         # one_pass()
-        two_passes(f"./uploads/{name}.{ext}", output_file, size, suffix)
+        two_passes(f"./uploads/{name}.{ext}", output_file, info)
         return f"""
             <p>{name}</p>
             <a href="{output_file}">download file</a>
