@@ -1,4 +1,5 @@
-from flask import Flask, request
+from flask import Flask
+from dataclasses import astuple, asdict
 from collections import deque
 import os
 import jobs
@@ -7,7 +8,7 @@ import json
 app = Flask(__name__)
 
 def check_ffmpeg_log(job_id: str, passes: int, n=10):
-    step, _, dur = jobs.get_job(job_id)
+    step, _, dur, filename = astuple(jobs.get_job(job_id))
     log_file = None
     match passes:
         case 1:
@@ -46,18 +47,18 @@ def check_ffmpeg_log(job_id: str, passes: int, n=10):
     new_pct = (out_val / dur * 100)
 
     print(f"{out_val}")
-    jobs.update_job(job_id, (step, new_pct, dur))
+    jobs.update_job(job_id, jobs.JobInfo(step, new_pct, dur, filename))
 
     log_file.close()
     return out_val
 
 
 def report_progress(job_id: str, step: str):
-    print(json.dumps(jobs.jobs, indent=4))
+    # print(json.dumps(jobs = [asdict(job) for job in jobs.jobs], indent=4))
     if job_id not in jobs.jobs.keys():
-        return "uh oh", 200
+        return "<div id=\"report\">uh oh</div>", 200
 
-    step, pct, dur = jobs.jobs[job_id]
+    step, pct, dur, filename = astuple(jobs.get_job(job_id))
     text = ""
     match step:
         case "dl":
@@ -79,13 +80,25 @@ def report_progress(job_id: str, step: str):
     print("====================")
     print(f"{pct}, {pct_text}")
     print("====================")
-    html = f"""
-    <div>
-        <p>okay okay {job_id}, {step}</p>
-        <p>{text} ({pct_text})</p>
-        <progress id="progress" value="{pct}" max="100"></progress>
-    </div>
-    """
+    html = None
+    if step != "done":
+        html = f"""
+        <div id="report" hx-get=/report/{job_id} hx-trigger="every 1s" hx-swap="outerHTML">
+            <p>{text} ({pct_text})</p>
+            <progress id="progress" value="{pct}" max="100"></progress>
+        </div>
+        """
+    else:
+        if filename:
+            print(filename)
+        prefix = "./processed/"
+        name, _ = filename[len(prefix):].rsplit(".", 1)
+        html = f"""
+        <div id="report">
+            <p>{name}</p>
+            <a href="{filename}">download file</a>
+        </div>
+        """
     # <div hx-get="/report/{id}?step={step}" hx-trigger="every 1s"></div>
 
     return html, 200

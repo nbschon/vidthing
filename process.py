@@ -107,7 +107,7 @@ def two_passes(in_path: str, out_path: str, info: RequestInfo):
         print("====================")
         print(f"duration: {duration}")
         print("====================")
-        jobs.update_job(info.id, ("p1", 0.0, duration * 1e6))
+        jobs.update_job(info.id, jobs.JobInfo("p1", 0.0, duration * 1e6, out_path))
         format_size = float(probe["format"]["size"])
         bitrate = format_size * 8 // duration
         print("====================")
@@ -162,7 +162,7 @@ def two_passes(in_path: str, out_path: str, info: RequestInfo):
             .run()
         )
 
-        jobs.update_job(id, ("p2", 0.0, duration * 1e6))
+        jobs.update_job(id, jobs.JobInfo("p2", 0.0, duration * 1e6, out_path))
 
         (
             ffmpeg
@@ -181,7 +181,7 @@ def two_passes(in_path: str, out_path: str, info: RequestInfo):
             .run(quiet=False)
         )
 
-        jobs.update_job(id, ("done", 100, 1))
+        jobs.update_job(id, jobs.JobInfo("done", 100, 1, out_path))
 
     output_size = os.path.getsize(out_path)
     print(f"size was {output_size:,} bytes (target was {target_size:,})")
@@ -201,9 +201,9 @@ def download(url: str, info: RequestInfo):
                 downloaded = d.get("downloaded_bytes", 0)
                 if total > 0:
                     percent = (downloaded / total) * 100
-                    jobs.update_job(info.id, ("dl", percent, 1.0))
+                    jobs.update_job(info.id, jobs.JobInfo("dl", percent, 1.0, ""))
             case "finished":
-                print("done!")
+                jobs.update_job(info.id, jobs.JobInfo("dl", 100.0, 1.0, ""))
 
     opts = {
         "outtmpl": "%(title)s.%(ext)s",

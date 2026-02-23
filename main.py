@@ -11,26 +11,16 @@ app = Flask(__name__)
 
 VALID_EXTS = {"mp4", "mkv", "webm", "mov", "avi"}
 
-# def valid_file(filename: str | None) -> tuple[bool, str]:
-#     if not filename:
-#         return (False, "")
-#
-#     ext = filename.rsplit(".", 1)[1].lower()
-#     if "." in filename and ext in VALID_EXTS:
-#         return (True, ext)
-#
-#     return (False, "")
-
 def validate_form(form) -> Optional[tuple[str, int]]:
     try:
-        size = int(form["size"])
+        _ = int(form["size"])
     except ValueError:
         return "invalid size", 400
     except KeyError:
         return "no size given", 400
 
     try:
-        suffix = form["suffix"]
+        _ = form["suffix"]
     except KeyError:
         return "no size suffix given", 400
 
@@ -60,7 +50,7 @@ def handle_file(id: str):
     size, suffix, passes = int(request.form["size"]), request.form["suffix"], int(request.form["passes"])
 
     file = request.files["file"]
-    if not file or file.filename == "":
+    if (not file and not file.filename) or file.filename == "":
         print("empty file")
         return "empty file", 400
 
@@ -138,10 +128,10 @@ def try_recv_file():
         match request.form["source_type"]:
             case "url":
                 print("url")
-                jobs.update_job(id, ("dl", 0.0, 1))
+                jobs.update_job(id, jobs.JobInfo("dl", 0.0, 1, ""))
                 threading.Thread(target=handle_url, args=(id, request.form)).start()
                 return f"""
-                <div hx-get=/report/{id}?step=dl hx-trigger="every 1s"></div>
+                <div id="report" hx-get=/report/{id} hx-trigger="every 1s" hx-swap="outerHTML">Waiting...</div>
                 """
             case "file":
                 print("file")
@@ -158,6 +148,10 @@ def get_processed_video(filename):
     except:
         return "file not found", 404
 
+@app.route("/report/<job_id>", methods=["GET"])
+def report(job_id):
+    step = request.args.get("step", "dl")
+    return report_progress(job_id, step)
 
 if __name__ == "__main__":
     # full_name = "./uploads/upload-20260217-16-12-08.mkv"
@@ -175,9 +169,4 @@ if __name__ == "__main__":
     download(url, info)
 # size_in_bytes(SIZE)
 # two_passes("testvideo.mp4", "15m")
-
-@app.route("/report/<job_id>", methods=["GET"])
-def report(job_id):
-    step = request.args.get("step", "dl")
-    return report_progress(job_id, step)
 

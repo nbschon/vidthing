@@ -3,7 +3,7 @@
 {% block content %}
 <main class="container">
     <form id="form" hx-encoding="multipart/form-data" hx-post="/upload" hx-target="#report"
-        hx-swap="innerHTML" hx-on::after-request="if(event.detail.successful) this.reset()" class="contained">
+        hx-swap="outerHTML" hx-on::after-request="if(event.detail.successful) this.reset()" class="contained">
         <fieldset>
             <label>
                 <input type="radio" name="source_type" value="file" checked>
@@ -65,7 +65,7 @@
     </div>
     </form>
     <div class="contained">
-        <div id="report"></div>
+        <div id="report"><i>...</i></div>
     </div>
 </main>
 <progress id="progress" value="0" max="100"></progress>
